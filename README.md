@@ -44,104 +44,163 @@ nodejs-demo-app/
 ├── server.test.js               # Jest + Supertest tests
 ├── package.json
 ├── package-lock.json
-├── Dockerfile                   # multi-stage-style, non-root user, HEALTHCHECK
+├── Dockerfile                   # non-root user, HEALTHCHECK
 ├── .dockerignore
 └── .gitignore
 ```
 
 ## Prerequisites
 
-- A GitHub account and a new (or existing) repo
+- A GitHub account and this repo pushed to it
 - A [DockerHub](https://hub.docker.com) account
-- Node.js 18+ installed locally (only needed if you want to run the app
-  outside Docker)
-- Git and the GitHub CLI (`gh`) installed locally — CLI steps below are
-  optional; the GitHub UI works fine too
+- Node.js 18+ installed locally (only needed to run the app outside Docker)
+- Git, and optionally the GitHub CLI (`gh`) — CLI steps below are optional,
+  the GitHub UI works fine too
 
-## Setup
+---
 
-### 1. Push this repo to GitHub
+## Step-by-Step Execution Guide
 
-**Console (GitHub UI)**
-1. Create a new empty repo on GitHub (no README/license, to avoid
-   merge conflicts).
-2. From this project folder:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: Node.js app + CI/CD pipeline"
-   git branch -M main
-   git remote add origin https://github.com/<your-username>/nodejs-demo-app.git
-   git push -u origin main
-   ```
+Follow these in order. Each step has a ✅ check — confirm it before moving on.
 
-**CLI (`gh`)**
+### Step 1 — Get the files onto your machine
+
 ```bash
-gh repo create nodejs-demo-app --public --source=. --remote=origin --push
+unzip nodejs-demo-app.zip
+cd nodejs-demo-app
+ls -la
+```
+✅ You should see `server.js`, `package.json`, `Dockerfile`,
+`.github/workflows/main.yml`, and this `README.md`.
+
+### Step 2 — Sanity-check the app locally (recommended)
+
+```bash
+npm install
+npm test
+```
+✅ Expect `Tests: 2 passed, 2 total`. If this fails, stop and fix it
+before touching GitHub.
+
+```bash
+npm start
+```
+In a second terminal:
+```bash
+curl http://localhost:3000/health
+```
+✅ Returns `{"status":"healthy"}`. Then `Ctrl+C` to stop the server.
+
+### Step 3 — Create the GitHub repo
+
+**Console**
+1. github.com → **New repository**
+2. Name: `nodejs-demo-app`
+3. Do **not** initialize with a README (you already have one)
+4. Create repository
+
+**CLI** (also wires the remote — skip the console part above and the
+`remote add` line in Step 4 if you use this)
+```bash
+gh repo create nodejs-demo-app --public --source=. --remote=origin
 ```
 
-### 2. Create a DockerHub access token
+### Step 4 — Push your code
 
-1. DockerHub → **Account Settings → Security → New Access Token**.
-2. Name it something like `github-actions-nodejs-demo`, scope:
-   **Read & Write**. Copy the token — it's shown only once.
+```bash
+git init
+git add .
+git commit -m "Initial commit: Node.js app + CI/CD pipeline"
+git branch -M main
+git remote add origin https://github.com/<your-username>/nodejs-demo-app.git
+git push -u origin main
+```
 
-### 3. Add the two required secrets to your GitHub repo
+✅ Refresh the repo page on GitHub — your files should be there. Click
+the **Actions** tab — a workflow run will appear and fail (no secrets
+yet). That's expected — continue.
+
+### Step 5 — Create a DockerHub access token
+
+1. Log into hub.docker.com
+2. **Account Settings → Security → New Access Token**
+3. Name: `github-actions-nodejs-demo`, permissions: **Read & Write**
+4. Copy the token immediately — DockerHub shows it only once
+
+### Step 6 — Add the two secrets to your GitHub repo
 
 The pipeline needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`. Without
-these, the `build-and-push` job will fail at the login step.
+these, `build-and-push` fails at the login step.
 
-**Console (GitHub UI)**
+**Console**
 Repo → **Settings → Secrets and variables → Actions → New repository
-secret** → add both:
+secret** — add both:
+
 | Name | Value |
 |---|---|
 | `DOCKERHUB_USERNAME` | your DockerHub username |
-| `DOCKERHUB_TOKEN` | the access token from step 2 |
+| `DOCKERHUB_TOKEN` | the token from Step 5 |
 
-**CLI (`gh`)**
+**CLI**
 ```bash
 gh secret set DOCKERHUB_USERNAME --body "<your-dockerhub-username>"
 gh secret set DOCKERHUB_TOKEN --body "<your-dockerhub-token>"
 ```
 
-### 4. Trigger the pipeline
+✅ `gh secret list` shows both names (values stay masked — that's normal).
 
-Push any change to `main` (or merge a PR into it):
+### Step 7 — Trigger the pipeline for real
+
 ```bash
-git commit --allow-empty -m "Trigger pipeline"
+git commit --allow-empty -m "Trigger pipeline with secrets configured"
 git push origin main
 ```
-Watch it run under the repo's **Actions** tab.
+Open the **Actions** tab and watch it run.
 
-## Run it locally (optional, before pushing)
+✅ Three jobs run in sequence and turn green: **test** →
+**build-and-push** → **deploy**. If `test` passes but `build-and-push`
+fails, check the Troubleshooting table below — almost always a secret
+name typo or a token scope issue.
+
+### Step 8 — Verify the image landed on DockerHub
+
+hub.docker.com → your repositories → `nodejs-demo-app`.
+
+✅ Two tags present: `latest` and a long commit SHA.
+
+### Step 9 — Pull and run the image, end to end
 
 ```bash
-npm install
-npm test                 # should show 2 passed
-npm start                # serves on http://localhost:3000
-
-# Docker
-docker build -t nodejs-demo-app .
-docker run -p 3000:3000 nodejs-demo-app
+docker pull <your-dockerhub-username>/nodejs-demo-app:latest
+docker run -p 3000:3000 <your-dockerhub-username>/nodejs-demo-app:latest
 curl http://localhost:3000/health
 ```
-> Verified in this environment: `npm install` and `npm test` were run
-> end-to-end here and both pass cleanly (2/2 tests). Docker wasn't
-> available in this sandbox to test-build the image, so do a local
-> `docker build` once before your first push, just to confirm.
+✅ Same healthy response as Step 2 — but now served from the image
+GitHub Actions itself built and pushed. The loop is closed.
+
+### Step 10 — Prove the PR safety guard (optional, good for a demo)
+
+```bash
+git checkout -b feature/test-branch
+git commit --allow-empty -m "test PR-only trigger"
+git push origin feature/test-branch
+```
+Open a PR into `main` on GitHub.
+
+✅ Only the **test** job runs; `build-and-push` and `deploy` are
+skipped. This proves the `if:` guard stops an untrusted branch from
+publishing an image.
+
+---
 
 ## Verification checklist
 
 - [ ] Repo pushed to GitHub with `.github/workflows/main.yml` present
 - [ ] `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets added
-- [ ] A push to `main` shows three green jobs in the **Actions** tab:
-      `test` → `build-and-push` → `deploy`
-- [ ] Image appears on DockerHub at `<username>/nodejs-demo-app` with
-      `latest` and a commit-SHA tag
-- [ ] `docker pull <username>/nodejs-demo-app:latest && docker run -p 3000:3000 <username>/nodejs-demo-app` works locally
-- [ ] Opening a PR (not pushing directly to main) runs **only** the
-      `test` job — confirms the `if:` guard on the later jobs works
+- [ ] A push to `main` shows three green jobs: `test` → `build-and-push` → `deploy`
+- [ ] Image appears on DockerHub with `latest` and a commit-SHA tag
+- [ ] `docker pull ... && docker run ...` works locally from the pushed image
+- [ ] A PR into `main` runs **only** the `test` job (confirms the `if:` guard)
 
 ## Troubleshooting
 
@@ -151,8 +210,8 @@ curl http://localhost:3000/health
 | `denied: requested access to the resource is denied` on push | Token scope is Read-only, or username/repo mismatch | Recreate token with **Read & Write**; confirm `IMAGE_NAME` matches your DockerHub namespace |
 | `test` job fails on `npm ci` | No `package-lock.json` committed, or lockfile out of sync with `package.json` | Run `npm install` locally once, commit the resulting `package-lock.json` |
 | Workflow doesn't trigger at all | Pushed to a branch other than `main`, or workflow file not under `.github/workflows/` | Confirm branch name and exact path |
-| `build-and-push` / `deploy` skipped even on a `main` push | `if:` condition checks `github.event_name == 'push'` — this also runs on `pull_request` events, which are intentionally excluded | Expected behavior for PRs; merge to `main` to trigger the full chain |
-| Container exits immediately | App crashed on start (check `PORT` env var, missing deps) | `docker logs <container_id>`; rebuild after `npm ci --omit=dev` step succeeds |
+| `build-and-push` / `deploy` skipped on a `main` push | `if:` condition only matches `push` events — `pull_request` events are intentionally excluded | Expected; merge to `main` to trigger the full chain |
+| Container exits immediately | App crashed on start (check `PORT` env var, missing deps) | `docker logs <container_id>`; rebuild after `npm ci --omit=dev` succeeds |
 
 ## Cost notes
 
@@ -163,8 +222,8 @@ curl http://localhost:3000/health
   repos and pull-rate limits apply on the free tier if you go private or
   pull very frequently from CI.
 - No AWS resources are provisioned by this pipeline itself — cost only
-  enters the picture once you wire up the `deploy` job to a real host
-  (e.g., an EC2 instance you're already running for the AWS module work).
+  enters the picture once the `deploy` job is wired to a real host (e.g.
+  an EC2 instance you're already running for the AWS module work).
 
 ## Cleanup
 
@@ -180,14 +239,13 @@ curl http://localhost:3000/health
 
 - **Why separate `test` from `build-and-push`**: fail fast — never build
   or publish an image from code that doesn't pass its own tests.
-- **Why gate on `github.event_name == 'push'`**: PRs from forks could
-  otherwise exfiltrate your DockerHub secrets or publish untrusted
-  images — `pull_request` events from forks don't get secrets by default
-  in GitHub Actions, but explicitly gating is the clearer, safer pattern.
+- **Why gate on `github.event_name == 'push'`**: explicitly excluding PRs
+  from the build/push/deploy stages is the clear, auditable way to keep
+  untrusted branches from publishing images or touching secrets.
 - **Why tag with both `latest` and the commit SHA**: `latest` is
   convenient, but only the SHA tag gives you an immutable, traceable
-  artifact — this is the difference between "deploy the newest thing"
-  and "deploy exactly this commit."
+  artifact — the difference between "deploy the newest thing" and
+  "deploy exactly this commit."
 - **Why `npm ci` instead of `npm install` in CI**: `ci` installs strictly
   from the lockfile and fails if `package.json`/`package-lock.json` are
   out of sync — deterministic builds, no surprise version drift.
