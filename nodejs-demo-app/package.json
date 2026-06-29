@@ -1,0 +1,20 @@
+{
+  "name": "nodejs-demo-app",
+  "version": "1.0.0",
+  "description": "Sample Node.js web app used to demonstrate a GitHub Actions CI/CD pipeline (test -> build -> push to DockerHub)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "jest --ci --colors"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
