@@ -213,27 +213,6 @@ publishing an image.
 | `build-and-push` / `deploy` skipped on a `main` push | `if:` condition only matches `push` events — `pull_request` events are intentionally excluded | Expected; merge to `main` to trigger the full chain |
 | Container exits immediately | App crashed on start (check `PORT` env var, missing deps) | `docker logs <container_id>`; rebuild after `npm ci --omit=dev` succeeds |
 
-## Cost notes
-
-- **GitHub Actions**: free for public repos; private repos on the Free
-  plan get 2,000 minutes/month — this pipeline runs in well under a
-  minute per push, so cost is a non-issue at this scale.
-- **DockerHub**: free tier allows unlimited public repositories; private
-  repos and pull-rate limits apply on the free tier if you go private or
-  pull very frequently from CI.
-- No AWS resources are provisioned by this pipeline itself — cost only
-  enters the picture once the `deploy` job is wired to a real host (e.g.
-  an EC2 instance you're already running for the AWS module work).
-
-## Cleanup
-
-- DockerHub: delete the `nodejs-demo-app` repository from your namespace
-  if you no longer need the images.
-- GitHub: remove the two repo secrets (Settings → Secrets and variables →
-  Actions) if you're decommissioning the pipeline, or delete the repo
-  entirely.
-- Local: `docker rmi nodejs-demo-app` and `docker system prune` to
-  reclaim disk space from test builds.
 
 ## Key CI/CD concepts to remember
 
